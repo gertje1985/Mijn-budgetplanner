@@ -2,10 +2,10 @@
   "name":"Mijn Budgetplanner",
   "short_name":"Budgetplanner",
   "start_url":"./index.html",
+  "scope":"./",
   "display":"standalone",
-  "background_color":"#fbf7f4",
-  "theme_color":"#d89aaa",
-  "description":"Persoonlijke budgetplanner voor inkomsten, uitgaven, budgetten en spaardoelen.",
+  "background_color":"#fcfaf9",
+  "theme_color":"#d99aaa",
   "icons":[
     {"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
     {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
