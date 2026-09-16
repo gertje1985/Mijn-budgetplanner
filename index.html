@@ -46,6 +46,10 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
     <button class="quick" data-action="pot">♡ Potje</button>
     <button class="quick" data-action="budget">€ Budget</button>
   </div>
+  <div class="grid2" style="margin-top:12px">
+    <button class="outline" data-nav="recurring">↻ Terugkerende inkomsten</button>
+    <button class="outline" data-nav="bills">▤ Vaste rekeningen</button>
+  </div>
   <div class="script">Mijn maand</div>
   <div id="homeSummary"></div>
   <div class="script">Recente transacties</div>
@@ -79,6 +83,20 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
   <div id="budgetList"></div>
 </section>
 
+
+<section id="recurring" class="page">
+  <div class="script">Terugkerende inkomsten</div>
+  <div class="small">Leg vast wat je regelmatig ontvangt. Kies zelf de frequentie.</div>
+  <button class="primary" data-action="recurring" style="margin-top:12px">＋ Inkomst instellen</button>
+  <div id="recurringList"></div>
+</section>
+
+<section id="bills" class="page">
+  <div class="script">Vaste rekeningen</div>
+  <div class="small">Bijvoorbeeld hypotheek, abonnementen of andere vaste lasten. Ook hier kies je de frequentie.</div>
+  <button class="primary" data-action="bill" style="margin-top:12px">＋ Rekening toevoegen</button>
+  <div id="billList"></div>
+</section>
 <section id="insights" class="page">
   <div class="script">Inzichten</div>
   <div id="insightList"></div>
@@ -97,7 +115,7 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
 <div id="modalBack" class="modal-back"><div class="modal"><div class="row"><div><div class="modal-title" id="modalTitle"></div><div class="small" id="modalSub"></div></div><button id="modalClose" class="outline">Sluiten</button></div><div id="modalBody"></div></div></div>
 
 <script>
-const KEY='mijn_budgetplanner_clean_v1';
+const KEY='mijn_budgetplanner_clean_v3';
 const euro=new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'});
 const eur=n=>euro.format(Number(n)||0);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -105,7 +123,7 @@ const today=()=>new Date().toISOString().slice(0,10);
 const monthKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')};
 
 let state=JSON.parse(localStorage.getItem(KEY)||'null')||{
-  transactions:[], accounts:[], pots:[], budgets:[],
+  transactions:[], accounts:[], pots:[], budgets:[], recurringIncome:[], bills:[],
   incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'],
   expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig']
 };
@@ -123,16 +141,20 @@ function showPage(id){
 }
 function render(){
  document.getElementById('monthLabel').textContent=monthName();
- renderHome();renderTransactions();renderAccounts();renderPots();renderBudgets();renderInsights();
+ renderHome();renderTransactions();renderAccounts();renderPots();renderBudgets();renderRecurring();renderBills();renderInsights();
 }
 function renderHome(){
  const tx=monthTransactions(), income=tx.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0), out=tx.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
  const available=income-out;
  document.getElementById('homeAvailable').textContent=eur(available);
+ const plannedIn=state.recurringIncome.reduce((s,r)=>s+r.amount,0);
+ const plannedBills=state.bills.reduce((s,r)=>s+r.amount,0);
  document.getElementById('homeSummary').innerHTML=`
  <div class="card"><div class="row"><span>Inkomsten</span><b class="plus">${eur(income)}</b></div>
  <div class="row"><span>Uitgaven</span><b class="minus">${eur(out)}</b></div>
- <div class="row"><span>Saldo deze maand</span><b>${eur(available)}</b></div></div>`;
+ <div class="row"><span>Saldo deze maand</span><b>${eur(available)}</b></div>
+ ${state.recurringIncome.length?`<div class="row small"><span>Terugkerende inkomsten ingesteld</span><b>${state.recurringIncome.length}</b></div>`:''}
+ ${state.bills.length?`<div class="row small"><span>Vaste rekeningen ingesteld</span><b>${state.bills.length}</b></div>`:''}</div>`;
  const recent=[...tx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
  document.getElementById('homeTransactions').innerHTML=recent.length?recent.map(t=>transactionCard(t,false)).join(''):'<div class="card empty">Nog geen transacties. Je begint helemaal schoon.</div>';
 }
@@ -163,6 +185,49 @@ function renderBudgets(){
    const spent=tx.filter(t=>t.category===b.category).reduce((s,t)=>s+t.amount,0), left=b.amount-spent,pct=b.amount?Math.min(100,spent/b.amount*100):0;
    return `<div class="card"><div class="row"><span><b>${esc(b.category)}</b><div class="small">Budget ${eur(b.amount)}</div></span><b class="${left<0?'minus':'plus'}">${left<0?'−':''}${eur(Math.abs(left))} ${left<0?'over':'over'}</b></div><div class="progress"><span style="width:${pct}%"></span></div><div class="row small"><span>${eur(spent)} uitgegeven</span><span>${Math.round(pct)}%</span></div><div class="action-row"><button data-edit-budget="${i}">Aanpassen</button><button class="danger" data-delete-budget="${i}">Verwijderen</button></div></div>`
  }).join(''):'<div class="card empty">Nog geen budgetten. Maak bijvoorbeeld een budget voor Boodschappen of Leuke dingen.</div>';
+}
+
+function freqLabel(f){
+ return ({week:'Per week','4weeks':'Per 4 weken',month:'Per maand','3months':'Per 3 maanden',year:'Per jaar',once:'Eenmalig'})[f]||f||'Eenmalig';
+}
+function renderRecurring(){
+ const el=document.getElementById('recurringList');
+ el.innerHTML=state.recurringIncome.length?state.recurringIncome.map((r,i)=>`<div class="card"><div class="row"><span><b>${esc(r.name)}</b><div class="small">${freqLabel(r.frequency)} · ${nlDate(r.nextDate)}</div></span><b class="plus">${eur(r.amount)}</b></div><div class="action-row"><button data-edit-rec="${i}">Aanpassen</button><button class="danger" data-delete-rec="${i}">Verwijderen</button></div></div>`).join(''):'<div class="card empty">Nog geen terugkerende inkomsten ingesteld.</div>';
+}
+function renderBills(){
+ const el=document.getElementById('billList');
+ el.innerHTML=state.bills.length?state.bills.map((b,i)=>`<div class="card"><div class="row"><span><b>${esc(b.name)}</b><div class="small">${freqLabel(b.frequency)} · volgende: ${nlDate(b.nextDate)}</div></span><b class="minus">${eur(b.amount)}</b></div><div class="action-row"><button data-edit-bill="${i}">Aanpassen</button><button class="danger" data-delete-bill="${i}">Verwijderen</button></div></div>`).join(''):'<div class="card empty">Nog geen vaste rekeningen ingesteld.</div>';
+}
+function recurringForm(r=null,isBill=false){
+ const x=r||{};
+ return `<form>
+ <div class="field"><label>Naam</label><input name="name" required value="${esc(x.name||'')}"></div>
+ <div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" min="0.01" required value="${x.amount||''}"></div>
+ <div class="field"><label>Frequentie</label><select name="frequency">
+ <option value="week" ${x.frequency==='week'?'selected':''}>Per week</option>
+ <option value="4weeks" ${x.frequency==='4weeks'?'selected':''}>Per 4 weken</option>
+ <option value="month" ${x.frequency==='month'?'selected':''}>Per maand</option>
+ <option value="3months" ${x.frequency==='3months'?'selected':''}>Per 3 maanden</option>
+ <option value="year" ${x.frequency==='year'?'selected':''}>Per jaar</option>
+ <option value="once" ${x.frequency==='once'?'selected':''}>Eenmalig</option>
+ </select></div>
+ <div class="field"><label>Volgende datum</label><input name="nextDate" type="date" required value="${x.nextDate||today()}"></div>
+ <div class="field"><label>Rekening</label><select name="accountId"><option value="">Geen rekening kiezen</option>${state.accounts.map(a=>`<option value="${a.id}" ${a.id===x.accountId?'selected':''}>${esc(a.name)}</option>`).join('')}</select></div>
+ <button class="primary">Opslaan</button></form>`;
+}
+function addRecurring(edit=null){
+ const r=edit!==null?state.recurringIncome[edit]:null;
+ openModal(edit!==null?'Terugkerende inkomsten aanpassen':'Terugkerende inkomsten instellen','De frequentie blijft bewaard.',recurringForm(r,false),fd=>{
+   const obj={id:r?.id||uid(),name:fd.get('name'),amount:Number(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   if(edit!==null)state.recurringIncome[edit]=obj;else state.recurringIncome.push(obj);save();render();
+ });
+}
+function addBill(edit=null){
+ const b=edit!==null?state.bills[edit]:null;
+ openModal(edit!==null?'Rekening aanpassen':'Vaste rekening toevoegen','Bijvoorbeeld per week, per 4 weken, per maand of per jaar.',recurringForm(b,true),fd=>{
+   const obj={id:b?.id||uid(),name:fd.get('name'),amount:Number(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   if(edit!==null)state.bills[edit]=obj;else state.bills.push(obj);save();render();
+ });
 }
 function renderInsights(){
  const tx=monthTransactions(),inc=tx.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0),out=tx.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
@@ -197,18 +262,35 @@ function addTransaction(type,editIndex=null){
 }
 function addAccount(edit=null){
  const a=edit!==null?state.accounts[edit]:{};
- openModal(edit!==null?'Rekening aanpassen':'Rekening toevoegen','Je kunt later altijd aanpassen of verwijderen.',`<form><div class="field"><label>Naam</label><input name="name" required value="${esc(a.name||'')}"></div><div class="field"><label>Type</label><select name="type"><option value="bank" ${a.type!=='debt'?'selected':''}>Bankrekening</option><option value="debt" ${a.type==='debt'?'selected':''}>Creditcard / schuld</option></select></div><div class="field"><label>Huidig saldo</label><input name="balance" type="number" step="0.01" value="${a.balance||0}"></div><button class="primary">Opslaan</button></form>`,fd=>{
-   const obj={id:a.id||uid(),name:fd.get('name'),type:fd.get('type'),balance:Number(fd.get('balance')||0)};
+ openModal(edit!==null?'Rekening aanpassen':'Rekening toevoegen','Je kunt later altijd aanpassen of verwijderen.',`<form><div class="field"><label>Naam</label><input name="name" required value="${esc(a.name||'')}"></div><div class="field"><label>Type</label><select name="type"><option value="bank" ${a.type!=='debt'?'selected':''}>Bankrekening</option><option value="debt" ${a.type==='debt'?'selected':''}>Creditcard / schuld</option></select></div><div class="field"><label>Huidig saldo</label><input name="balance" type="number" step="0.01" value="${a.balance||0}"></div>
+ <div class="field"><label>Frequentie (als je deze rekening als terugkerende post gebruikt)</label><select name="frequency"><option value="">Geen</option><option value="week" ${a.frequency==='week'?'selected':''}>Per week</option><option value="4weeks" ${a.frequency==='4weeks'?'selected':''}>Per 4 weken</option><option value="month" ${a.frequency==='month'?'selected':''}>Per maand</option><option value="3months" ${a.frequency==='3months'?'selected':''}>Per 3 maanden</option><option value="year" ${a.frequency==='year'?'selected':''}>Per jaar</option></select></div>
+ <button class="primary">Opslaan</button></form>`,fd=>{
+   const obj={id:a.id||uid(),name:fd.get('name'),type:fd.get('type'),balance:Number(fd.get('balance')||0),frequency:fd.get('frequency')||''};
    if(edit!==null)state.accounts[edit]=obj;else state.accounts.push(obj);save();render();
  });
 }
 function addPot(edit=null){
  const p=edit!==null?state.pots[edit]:{name:'',target:0,contributions:[]};
- openModal(edit!==null?'Potje aanpassen':'Nieuw potje','Je begint schoon: alleen dit potje wordt aangemaakt.',`<form><div class="field"><label>Naam van het potje</label><input name="name" required value="${esc(p.name)}"></div><div class="field"><label>Doelbedrag</label><input name="target" type="number" step="0.01" min="0" required value="${p.target||''}"></div><button class="primary">Opslaan</button></form>`,fd=>{
-   const obj={id:p.id||uid(),name:fd.get('name'),target:Number(fd.get('target')||0),contributions:p.contributions||[]};
-   if(edit!==null)state.pots[edit]=obj;else state.pots.push(obj);save();render();
- });
+ openModal(
+   edit!==null?'Potje aanpassen':'Nieuw potje',
+   edit!==null?'Pas de naam en/of het doelbedrag aan. Je bestaande inleg blijft staan.':'Maak alleen de potjes die je echt nodig hebt.',
+   `<form>
+      <div class="field"><label>Naam van het potje</label><input name="name" required value="${esc(p.name)}"></div>
+      <div class="field"><label>Doelbedrag</label><input name="target" type="number" step="0.01" min="0" required value="${p.target||''}"></div>
+      ${edit!==null?`<div class="card" style="margin:12px 0;background:#fff7f9"><b>Let op</b><div class="small">Het aanpassen van het doelbedrag verandert alleen het doel. Je bestaande inleggen blijven behouden.</div></div>`:''}
+      <button class="primary">Opslaan</button>
+    </form>`,
+   fd=>{
+     p.name=fd.get('name');
+     p.target=Number(fd.get('target')||0);
+     p.contributions=p.contributions||[];
+     if(edit!==null)state.pots[edit]=p;else state.pots.push({...p,id:uid()});
+     save();render();
+     if(edit!==null)setTimeout(()=>showPotDetail(edit),0);
+   }
+ );
 }
+
 function addContribution(i){
  const p=state.pots[i];
  openModal('Inleg in '+p.name,'Elke inleg krijgt een eigen datum en omschrijving.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" min="0.01" required></div><div class="field"><label>Datum</label><input name="date" type="date" value="${today()}" required></div><div class="field"><label>Omschrijving</label><input name="note" value="Inleg"></div><button class="primary">Inleg opslaan</button></form>`,fd=>{
@@ -233,14 +315,14 @@ function addBudget(edit=null){
 function deleteConfirm(message,fn){if(confirm(message)){fn();save();render()}}
 function resetAll(){
  if(!confirm('Alles wissen en helemaal opnieuw beginnen? Dit verwijdert alle inkomsten, uitgaven, rekeningen, potjes en budgetten op dit apparaat.'))return;
- state={transactions:[],accounts:[],pots:[],budgets:[],incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'],expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig']};
+ state={transactions:[],accounts:[],pots:[],budgets:[],recurringIncome:[],bills:[],incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'],expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig']};
  save();render();showPage('home');
 }
 document.addEventListener('click',e=>{
  const nav=e.target.closest('[data-nav]');if(nav){showPage(nav.dataset.nav);return}
  const act=e.target.closest('[data-action]');if(act){
    const a=act.dataset.action;
-   if(a==='income')addTransaction('in'); if(a==='expense')addTransaction('out'); if(a==='transaction')addTransaction(txType); if(a==='account')addAccount();if(a==='pot')addPot();if(a==='budget')addBudget();return;
+   if(a==='income')addTransaction('in'); if(a==='expense')addTransaction('out'); if(a==='transaction')addTransaction(txType); if(a==='account')addAccount();if(a==='pot')addPot();if(a==='budget')addBudget();if(a==='recurring')addRecurring();if(a==='bill')addBill();return;
  }
  if(e.target.id==='modalClose'||e.target===document.getElementById('modalBack')){closeModal();return}
  if(e.target.id==='txOut'){txType='out';document.getElementById('txOut').classList.add('active');document.getElementById('txIn').classList.remove('active');renderTransactions()}
@@ -257,7 +339,15 @@ document.addEventListener('click',e=>{
  const db=e.target.closest('[data-delete-budget]');if(db){deleteConfirm('Dit budget verwijderen?',()=>state.budgets.splice(+db.dataset.deleteBudget,1));return}
  const ec=e.target.closest('[data-edit-con]');if(ec){const [i,j]=ec.dataset.editCon.split(':').map(Number);const c=state.pots[i].contributions[j];openModal('Inleg aanpassen','Pas bedrag, datum of omschrijving aan.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" required value="${c.amount}"></div><div class="field"><label>Datum</label><input name="date" type="date" required value="${c.date}"></div><div class="field"><label>Omschrijving</label><input name="note" value="${esc(c.note||'Inleg')}"></div><button class="primary">Opslaan</button></form>`,fd=>{c.amount=Number(fd.get('amount'));c.date=fd.get('date');c.note=fd.get('note');save();render();showPotDetail(i)});return}
  const dc=e.target.closest('[data-delete-con]');if(dc){const [i,j]=dc.dataset.deleteCon.split(':').map(Number);deleteConfirm('Deze inleg verwijderen?',()=>state.pots[i].contributions.splice(j,1));return}
- const mac=e.target.closest('[data-modal-add-con]');if(mac){closeModal();setTimeout(()=>addContribution(+mac.dataset.modalAddCon),50);return}
+ 
+ const er=e.target.closest('[data-edit-rec]');if(er){addRecurring(+er.dataset.editRec);return}
+ const dr=e.target.closest('[data-delete-rec]');if(dr){deleteConfirm('Deze terugkerende inkomsten verwijderen?',()=>state.recurringIncome.splice(+dr.dataset.deleteRec,1));return}
+ const ebill=e.target.closest('[data-edit-bill]');if(ebill){addBill(+ebill.dataset.editBill);return}
+ const dbill=e.target.closest('[data-delete-bill]');if(dbill){deleteConfirm('Deze vaste rekening verwijderen?',()=>state.bills.splice(+dbill.dataset.deleteBill,1));return}
+
+ const mep=e.target.closest('[data-modal-edit-pot]');if(mep){const i=+mep.dataset.modalEditPot;closeModal();setTimeout(()=>addPot(i),50);return}
+ const mdp=e.target.closest('[data-modal-delete-pot]');if(mdp){const i=+mdp.dataset.modalDeletePot;deleteConfirm('Dit hele potje inclusief het inlegoverzicht verwijderen?',()=>state.pots.splice(i,1));return}
+const mac=e.target.closest('[data-modal-add-con]');if(mac){closeModal();setTimeout(()=>addContribution(+mac.dataset.modalAddCon),50);return}
 });
 document.getElementById('prevMonth').onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()-1);render()};
 document.getElementById('nextMonth').onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()+1);render()};
