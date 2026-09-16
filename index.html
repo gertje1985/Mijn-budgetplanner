@@ -527,6 +527,7 @@ function txEl(x){
  return d;
 }
 function renderTx(tx){let el=document.getElementById('txList');el.innerHTML='';tx.filter(x=>x.type===txTab).sort((a,b)=>b.date.localeCompare(a.date)).forEach(x=>el.appendChild(txEl(x))); if(!el.children.length)el.innerHTML='<div class="card">Nog geen transacties in deze periode.</div>'}
+function setTxTab(m){txTab=m;document.getElementById('tabOut').classList.toggle('sel',m==='out');document.getElementById('tabIn').classList.toggle('sel',m==='in');render();}
 function renderCats(tx){
  let el=document.getElementById('categories');el.innerHTML='';
  let totals={};tx.filter(x=>x.type==='out').forEach(x=>totals[x.cat]=(totals[x.cat]||0)+x.amount);
