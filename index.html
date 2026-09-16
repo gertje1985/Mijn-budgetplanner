@@ -117,10 +117,12 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
 <div id="modalBack" class="modal-back"><div class="modal"><div class="row"><div><div class="modal-title" id="modalTitle"></div><div class="small" id="modalSub"></div></div><button id="modalClose" class="outline">Sluiten</button></div><div id="modalBody"></div></div></div>
 
 <script>
-const KEY='mijn_budgetplanner_clean_v9';
-const OLD_KEYS=['mijn_budgetplanner_clean_v8','mijn_budgetplanner_clean_v7','mijn_budgetplanner_clean_v6','mijn_budgetplanner_clean_v5','mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
+const KEY='mijn_budgetplanner_clean_v10';
+const OLD_KEYS=['mijn_budgetplanner_clean_v9','mijn_budgetplanner_clean_v8','mijn_budgetplanner_clean_v7','mijn_budgetplanner_clean_v6','mijn_budgetplanner_clean_v5','mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
 const euro=new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'});
 const eur=n=>euro.format(Number(n)||0);
+function money(v){let s=String(v??'').trim().replace(/€/g,'').replace(/\s/g,'');if(s.includes(',')&&s.includes('.')){s=s.lastIndexOf(',')>s.lastIndexOf('.')?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');}else{s=s.replace(',','.');}const n=Number(s);return Number.isFinite(n)?n:0;}
+function moneyValue(v){return v===undefined||v===null||v===''?'':String(v).replace('.',',');}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const today=()=>new Date().toISOString().slice(0,10);
 const monthKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')};
@@ -284,7 +286,7 @@ function recurringForm(r=null,isBill=false){
  const x=r||{};
  return `<form>
  <div class="field"><label>Naam</label><input name="name" required value="${esc(x.name||'')}"></div>
- <div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" min="0.01" required value="${x.amount||''}"></div>
+ <div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" min="0.01" required value="${moneyValue(x.amount)}"></div>
  <div class="field"><label>Frequentie</label><select name="frequency">
  <option value="week" ${x.frequency==='week'?'selected':''}>Per week</option>
  <option value="4weeks" ${x.frequency==='4weeks'?'selected':''}>Per 4 weken</option>
@@ -300,14 +302,14 @@ function recurringForm(r=null,isBill=false){
 function addRecurring(edit=null){
  const r=edit!==null?state.recurringIncome[edit]:null;
  openModal(edit!==null?'Terugkerende inkomsten aanpassen':'Terugkerende inkomsten instellen','De frequentie blijft bewaard.',recurringForm(r,false),fd=>{
-   const obj={id:r?.id||uid(),name:fd.get('name'),amount:Number(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   const obj={id:r?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
    if(edit!==null)state.recurringIncome[edit]=obj;else state.recurringIncome.push(obj);save();render();
  });
 }
 function addBill(edit=null){
  const b=edit!==null?state.bills[edit]:null;
  openModal(edit!==null?'Rekening aanpassen':'Vaste rekening toevoegen','Bijvoorbeeld per week, per 4 weken, per maand of per jaar.',recurringForm(b,true),fd=>{
-   const obj={id:b?.id||uid(),name:fd.get('name'),amount:Number(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   const obj={id:b?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
    if(edit!==null)state.bills[edit]=obj;else state.bills.push(obj);save();render();
  });
 }
@@ -327,7 +329,7 @@ function openModal(title,sub,body,onSave){
 function closeModal(){document.getElementById('modalBack').classList.remove('show');document.getElementById('modalBody').innerHTML=''}
 function transactionForm(t=null){
  const isIn=t?.type==='in',cats=isIn?state.incomeCategories:state.expenseCategories;
- return `<form><div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" min="0.01" required value="${t?.amount||''}"></div>
+ return `<form><div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" min="0.01" required value="${moneyValue(t?.amount)}"></div>
  <div class="field"><label>Omschrijving</label><input name="description" required value="${esc(t?.description||'')}"></div>
  <div class="field"><label>Datum</label><input name="date" type="date" required value="${t?.date||today()}"></div>
  <div class="field"><label>Categorie</label><select name="category">${cats.map(c=>`<option ${c===t?.category?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
@@ -347,7 +349,7 @@ function addTransaction(type,editIndex=null){
  const t=editIndex!==null?state.transactions[editIndex]:{type};
  openModal(editIndex!==null?'Transactie aanpassen':(type==='in'?'Inkomst toevoegen':'Uitgave toevoegen'),'Alles wat je invult blijft op je telefoon bewaard.',transactionForm(t),fd=>{
    const frequency=type==='in'?(fd.get('frequency')||'once'):'once';
-   const obj={id:t.id||uid(),type,amount:Number(fd.get('amount')),description:fd.get('description'),date:fd.get('date'),category:fd.get('category'),method:fd.get('method'),accountId:fd.get('accountId')||'',frequency};
+   const obj={id:t.id||uid(),type,amount:money(fd.get('amount')),description:fd.get('description'),date:fd.get('date'),category:fd.get('category'),method:fd.get('method'),accountId:fd.get('accountId')||'',frequency};
    if(editIndex!==null)state.transactions[editIndex]=obj;
    else if(type==='in' && frequency!=='once' && obj.date>today()) { /* future recurring income is stored as a schedule, not as a transaction yet */ }
    else state.transactions.push(obj);
@@ -368,10 +370,10 @@ function addTransaction(type,editIndex=null){
 }
 function addAccount(edit=null){
  const a=edit!==null?state.accounts[edit]:{};
- openModal(edit!==null?'Rekening aanpassen':'Rekening toevoegen','Je kunt later altijd aanpassen of verwijderen.',`<form><div class="field"><label>Naam</label><input name="name" required value="${esc(a.name||'')}"></div><div class="field"><label>Type</label><select name="type"><option value="bank" ${a.type!=='debt'?'selected':''}>Bankrekening</option><option value="debt" ${a.type==='debt'?'selected':''}>Creditcard / schuld</option></select></div><div class="field"><label>Huidig saldo</label><input name="balance" type="number" step="0.01" value="${a.balance||0}"></div>
+ openModal(edit!==null?'Rekening aanpassen':'Rekening toevoegen','Je kunt later altijd aanpassen of verwijderen.',`<form><div class="field"><label>Naam</label><input name="name" required value="${esc(a.name||'')}"></div><div class="field"><label>Type</label><select name="type"><option value="bank" ${a.type!=='debt'?'selected':''}>Bankrekening</option><option value="debt" ${a.type==='debt'?'selected':''}>Creditcard / schuld</option></select></div><div class="field"><label>Huidig saldo</label><input name="balance" type="text" inputmode="decimal" value="${moneyValue(a.balance||0)}"></div>
  <div class="field"><label>Frequentie (als je deze rekening als terugkerende post gebruikt)</label><select name="frequency"><option value="">Geen</option><option value="week" ${a.frequency==='week'?'selected':''}>Per week</option><option value="4weeks" ${a.frequency==='4weeks'?'selected':''}>Per 4 weken</option><option value="month" ${a.frequency==='month'?'selected':''}>Per maand</option><option value="3months" ${a.frequency==='3months'?'selected':''}>Per 3 maanden</option><option value="year" ${a.frequency==='year'?'selected':''}>Per jaar</option></select></div>
  <button class="primary">Opslaan</button></form>`,fd=>{
-   const obj={id:a.id||uid(),name:fd.get('name'),type:fd.get('type'),balance:Number(fd.get('balance')||0),frequency:fd.get('frequency')||''};
+   const obj={id:a.id||uid(),name:fd.get('name'),type:fd.get('type'),balance:money(fd.get('balance')||0),frequency:fd.get('frequency')||''};
    if(edit!==null)state.accounts[edit]=obj;else state.accounts.push(obj);save();render();
  });
 }
@@ -384,14 +386,14 @@ function addPot(edit=null){
    `<form>
       <div class="field"><label>Naam van het potje</label><input name="name" required value="${esc(p.name)}"></div>
       <div class="field"><label>Soort</label><select name="kind"><option value="saving" ${p.kind!=='investment'?'selected':''}>Spaarpotje</option><option value="investment" ${p.kind==='investment'?'selected':''}>Beleggingen</option></select></div>
-      <div class="field"><label>${p.kind==='investment'?'Totaal ingelegd':'Doelbedrag'}</label><input name="target" type="number" step="0.01" min="0" ${p.kind==='investment'?'':'required'} value="${p.target||''}"></div>
+      <div class="field"><label>${p.kind==='investment'?'Totaal ingelegd':'Doelbedrag'}</label><input name="target" type="text" inputmode="decimal" min="0" ${p.kind==='investment'?'':'required'} value="${moneyValue(p.target)}"></div>
       ${edit!==null?`<div class="card" style="margin:12px 0;background:#fff7f9"><b>Let op</b><div class="small">Het aanpassen van het doelbedrag verandert alleen het doel. Je bestaande inleggen blijven behouden.</div></div>`:''}
       <button class="primary">Opslaan</button>
     </form>`,
    fd=>{
      p.name=fd.get('name');
      p.kind=fd.get('kind')||'saving';
-     p.target=Number(fd.get('target')||0);
+     p.target=money(fd.get('target')||0);
      p.contributions=p.contributions||[];
      if(edit!==null)state.pots[edit]=p;else state.pots.push({...p,id:uid()});
      save();render();
@@ -402,8 +404,8 @@ function addPot(edit=null){
 
 function addContribution(i){
  const p=state.pots[i];
- openModal('Inleg in '+p.name,'Elke inleg krijgt een eigen datum en omschrijving.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" min="0.01" required></div><div class="field"><label>Datum</label><input name="date" type="date" value="${today()}" required></div><div class="field"><label>Omschrijving</label><input name="note" value="Inleg"></div><button class="primary">Inleg opslaan</button></form>`,fd=>{
-   p.contributions.push({id:uid(),amount:Number(fd.get('amount')),date:fd.get('date'),note:fd.get('note')||'Inleg'});save();render();showPotDetail(i);
+ openModal('Inleg in '+p.name,'Elke inleg krijgt een eigen datum en omschrijving.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" min="0.01" required></div><div class="field"><label>Datum</label><input name="date" type="date" value="${today()}" required></div><div class="field"><label>Omschrijving</label><input name="note" value="Inleg"></div><button class="primary">Inleg opslaan</button></form>`,fd=>{
+   p.contributions.push({id:uid(),amount:money(fd.get('amount')),date:fd.get('date'),note:fd.get('note')||'Inleg'});save();render();showPotDetail(i);
  });
 }
 function showPotDetail(i){
@@ -424,8 +426,8 @@ function manageCategories(){
 }
 function addBudget(edit=null){
  const b=edit!==null?state.budgets[edit]:{};
- openModal(edit!==null?'Budget aanpassen':'Nieuw budget','Kies zelf of dit bedrag per week, per maand of een andere periode geldt.',`<form><div class="field"><label>Categorie</label><input name="category" list="catlist" required value="${esc(b.category||'')}"><datalist id="catlist">${state.expenseCategories.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div><div class="field"><label>Budgetbedrag</label><input name="amount" type="number" step="0.01" min="0.01" required value="${b.amount||''}"></div><div class="field"><label>Periode</label><select name="frequency"><option value="week" ${(b.frequency||'month')==='week'?'selected':''}>Iedere week</option><option value="4weeks" ${b.frequency==='4weeks'?'selected':''}>Iedere 4 weken</option><option value="month" ${(b.frequency||'month')==='month'?'selected':''}>Iedere maand</option><option value="3months" ${b.frequency==='3months'?'selected':''}>Iedere 3 maanden</option><option value="year" ${b.frequency==='year'?'selected':''}>Ieder jaar</option></select></div><button class="primary">Opslaan</button></form>`,fd=>{
-   const obj={id:b.id||uid(),category:fd.get('category'),amount:Number(fd.get('amount')),frequency:fd.get('frequency')||'month'};
+ openModal(edit!==null?'Budget aanpassen':'Nieuw budget','Kies zelf of dit bedrag per week, per maand of een andere periode geldt.',`<form><div class="field"><label>Categorie</label><input name="category" list="catlist" required value="${esc(b.category||'')}"><datalist id="catlist">${state.expenseCategories.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div><div class="field"><label>Budgetbedrag</label><input name="amount" type="text" inputmode="decimal" min="0.01" required value="${moneyValue(b.amount)}"></div><div class="field"><label>Periode</label><select name="frequency"><option value="week" ${(b.frequency||'month')==='week'?'selected':''}>Iedere week</option><option value="4weeks" ${b.frequency==='4weeks'?'selected':''}>Iedere 4 weken</option><option value="month" ${(b.frequency||'month')==='month'?'selected':''}>Iedere maand</option><option value="3months" ${b.frequency==='3months'?'selected':''}>Iedere 3 maanden</option><option value="year" ${b.frequency==='year'?'selected':''}>Ieder jaar</option></select></div><button class="primary">Opslaan</button></form>`,fd=>{
+   const obj={id:b.id||uid(),category:fd.get('category'),amount:money(fd.get('amount')),frequency:fd.get('frequency')||'month'};
    if(edit!==null)state.budgets[edit]=obj;else state.budgets.push(obj);save();render();
  });
 }
@@ -454,7 +456,7 @@ document.addEventListener('click',e=>{
  const pd=e.target.closest('[data-pot-detail]');if(pd){showPotDetail(+pd.dataset.potDetail);return}
  const eb=e.target.closest('[data-edit-budget]');if(eb){addBudget(+eb.dataset.editBudget);return}
  const db=e.target.closest('[data-delete-budget]');if(db){deleteConfirm('Dit budget verwijderen?',()=>state.budgets.splice(+db.dataset.deleteBudget,1));return}
- const ec=e.target.closest('[data-edit-con]');if(ec){const [i,j]=ec.dataset.editCon.split(':').map(Number);const c=state.pots[i].contributions[j];openModal('Inleg aanpassen','Pas bedrag, datum of omschrijving aan.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="number" step="0.01" required value="${c.amount}"></div><div class="field"><label>Datum</label><input name="date" type="date" required value="${c.date}"></div><div class="field"><label>Omschrijving</label><input name="note" value="${esc(c.note||'Inleg')}"></div><button class="primary">Opslaan</button></form>`,fd=>{c.amount=Number(fd.get('amount'));c.date=fd.get('date');c.note=fd.get('note');save();render();showPotDetail(i)});return}
+ const ec=e.target.closest('[data-edit-con]');if(ec){const [i,j]=ec.dataset.editCon.split(':').map(Number);const c=state.pots[i].contributions[j];openModal('Inleg aanpassen','Pas bedrag, datum of omschrijving aan.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" required value="${moneyValue(c.amount)}"></div><div class="field"><label>Datum</label><input name="date" type="date" required value="${c.date}"></div><div class="field"><label>Omschrijving</label><input name="note" value="${esc(c.note||'Inleg')}"></div><button class="primary">Opslaan</button></form>`,fd=>{c.amount=money(fd.get('amount'));c.date=fd.get('date');c.note=fd.get('note');save();render();showPotDetail(i)});return}
  const dc=e.target.closest('[data-delete-con]');if(dc){const [i,j]=dc.dataset.deleteCon.split(':').map(Number);deleteConfirm('Deze inleg verwijderen?',()=>state.pots[i].contributions.splice(j,1));return}
  
  const er=e.target.closest('[data-edit-rec]');if(er){addRecurring(+er.dataset.editRec);return}
