@@ -134,6 +134,8 @@ state=state||{
   incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'],
   expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig']
 };
+state.incomeCategories=Array.isArray(state.incomeCategories)?state.incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'];
+state.expenseCategories=Array.isArray(state.expenseCategories)?state.expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig'];
 state.pots=(state.pots||[]).map(p=>({...p,kind:p.kind||'saving',contributions:p.contributions||[]}));
 
 let viewMonth=new Date(); viewMonth.setDate(1);
@@ -460,7 +462,7 @@ document.addEventListener('click',e=>{
  const nav=e.target.closest('[data-nav]');if(nav){showPage(nav.dataset.nav);return}
  const act=e.target.closest('[data-action]');if(act){
    const a=act.dataset.action;
-   if(a==='income')addTransaction('in'); if(a==='expense')addTransaction('out'); if(a==='transaction')addTransaction(txType); if(a==='account')addAccount();if(a==='pot')addPot();if(a==='budget')addBudget();if(a==='recurring')addRecurring();if(a==='bill')addBill();return;
+   if(a==='income')addTransaction('in'); if(a==='expense')addTransaction('out'); if(a==='transaction')addTransaction(txType); if(a==='account')addAccount();if(a==='pot')addPot();if(a==='budget')addBudget();if(a==='recurring')addRecurring();if(a==='bill')addBill();if(a==='categories')manageCategories();return;
  }
  if(e.target.id==='modalClose'||e.target===document.getElementById('modalBack')){closeModal();return}
  if(e.target.id==='txOut'){txType='out';document.getElementById('txOut').classList.add('active');document.getElementById('txIn').classList.remove('active');renderTransactions()}
@@ -475,6 +477,7 @@ document.addEventListener('click',e=>{
  const pd=e.target.closest('[data-pot-detail]');if(pd){showPotDetail(+pd.dataset.potDetail);return}
  const eb=e.target.closest('[data-edit-budget]');if(eb){addBudget(+eb.dataset.editBudget);return}
  const db=e.target.closest('[data-delete-budget]');if(db){deleteConfirm('Dit budget verwijderen?',()=>state.budgets.splice(+db.dataset.deleteBudget,1));return}
+ const dcat=e.target.closest('[data-delete-category]');if(dcat){const [type,idx]=dcat.dataset.deleteCategory.split(':');const list=type==='out'?state.expenseCategories:state.incomeCategories;const cat=list[+idx];const used=state.transactions.some(t=>t.category===cat)||state.bills.some(b=>b.category===cat)||state.budgets.some(b=>b.category===cat)||state.recurringIncome.some(r=>r.category===cat);if(used){alert('Deze categorie wordt nog gebruikt. Pas eerst de betreffende items aan.');return}deleteConfirm('Categorie "'+cat+'" verwijderen?',()=>list.splice(+idx,1));return}
  const ec=e.target.closest('[data-edit-con]');if(ec){const [i,j]=ec.dataset.editCon.split(':').map(Number);const c=state.pots[i].contributions[j];openModal('Inleg aanpassen','Pas bedrag, datum of omschrijving aan.',`<form><div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" required value="${moneyValue(c.amount)}"></div><div class="field"><label>Datum</label><input name="date" type="date" required value="${c.date}"></div><div class="field"><label>Omschrijving</label><input name="note" value="${esc(c.note||'Inleg')}"></div><button class="primary">Opslaan</button></form>`,fd=>{c.amount=money(fd.get('amount'));c.date=fd.get('date');c.note=fd.get('note');save();render();showPotDetail(i)});return}
  const dc=e.target.closest('[data-delete-con]');if(dc){const [i,j]=dc.dataset.deleteCon.split(':').map(Number);deleteConfirm('Deze inleg verwijderen?',()=>state.pots[i].contributions.splice(j,1));return}
  
