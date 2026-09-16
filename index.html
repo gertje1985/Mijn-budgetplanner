@@ -117,8 +117,8 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
 <div id="modalBack" class="modal-back"><div class="modal"><div class="row"><div><div class="modal-title" id="modalTitle"></div><div class="small" id="modalSub"></div></div><button id="modalClose" class="outline">Sluiten</button></div><div id="modalBody"></div></div></div>
 
 <script>
-const KEY='mijn_budgetplanner_clean_v7';
-const OLD_KEYS=['mijn_budgetplanner_clean_v6','mijn_budgetplanner_clean_v5','mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
+const KEY='mijn_budgetplanner_clean_v9';
+const OLD_KEYS=['mijn_budgetplanner_clean_v8','mijn_budgetplanner_clean_v7','mijn_budgetplanner_clean_v6','mijn_budgetplanner_clean_v5','mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
 const euro=new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'});
 const eur=n=>euro.format(Number(n)||0);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -169,27 +169,37 @@ function currentAvailable(){
  return state.transactions.filter(t=>t.date<=today()).reduce((s,t)=>s+(t.type==='in'?t.amount:-t.amount),0);
 }
 function renderHome(){
- const tx=monthTransactions(), income=tx.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0), out=tx.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
+ const allMonth=monthTransactions();
+ const todayStr=today();
+ const actualTx=allMonth.filter(t=>t.date<=todayStr);
+ const futureTx=allMonth.filter(t=>t.date>todayStr);
+ const income=actualTx.filter(t=>t.type==='in').reduce((s,t)=>s+Number(t.amount||0),0);
+ const out=actualTx.filter(t=>t.type==='out').reduce((s,t)=>s+Number(t.amount||0),0);
  const nowAvailable=currentAvailable();
- const futureIn=state.recurringIncome.flatMap(r=>scheduledOccurrences(r,today(),monthEnd()).map(d=>({date:d,amount:Number(r.amount)||0}))).reduce((sum,x)=>sum+x.amount,0);
- const futureBills=state.bills.flatMap(b=>scheduledOccurrences(b,today(),monthEnd()).map(d=>({date:d,amount:Number(b.amount)||0}))).reduce((sum,x)=>sum+x.amount,0);
- const afterBills=nowAvailable+futureIn-futureBills;
+ const futureIncomeTx=futureTx.filter(t=>t.type==='in').map(t=>({name:t.description,amount:Number(t.amount||0),date:t.date}));
+ const futureExpenseTx=futureTx.filter(t=>t.type==='out').map(t=>({name:t.description,amount:Number(t.amount||0),date:t.date}));
+ const futureRecurringIncome=state.recurringIncome.flatMap(r=>scheduledOccurrences(r,todayStr,monthEnd()).map(d=>({name:r.name,amount:Number(r.amount)||0,date:d})));
+ const futureBills=state.bills.flatMap(b=>scheduledOccurrences(b,todayStr,monthEnd()).map(d=>({name:b.name,amount:Number(b.amount)||0,date:d})));
+ const upcomingIncome=[...futureIncomeTx,...futureRecurringIncome].sort((a,b)=>a.date.localeCompare(b.date));
+ const upcomingBills=[...futureExpenseTx,...futureBills].sort((a,b)=>a.date.localeCompare(b.date));
+ const futureIn=upcomingIncome.reduce((sum,x)=>sum+x.amount,0);
+ const futureOut=upcomingBills.reduce((sum,x)=>sum+x.amount,0);
+ const afterBills=nowAvailable+futureIn-futureOut;
  document.getElementById('homeAvailable').textContent=eur(nowAvailable);
- const upcomingBills=state.bills.flatMap((b,bi)=>scheduledOccurrences(b,today(),monthEnd()).map(d=>({name:b.name,amount:b.amount,date:d,idx:bi}))).sort((a,b)=>a.date.localeCompare(b.date));
- const upcomingIncome=state.recurringIncome.flatMap((r,ri)=>scheduledOccurrences(r,today(),monthEnd()).map(d=>({name:r.name,amount:r.amount,date:d,idx:ri}))).sort((a,b)=>a.date.localeCompare(b.date));
  document.getElementById('homeSummary').innerHTML=`
  <div class="card">
    <div class="row"><span><b>Nu beschikbaar</b><div class="small">Wat er op dit moment beschikbaar is</div></span><b>${eur(nowAvailable)}</b></div>
-   <div class="row"><span><b class="plus">Nog te ontvangen</b><div class="small">Deze maand, vanaf morgen</div></span><b class="plus">+${eur(futureIn)}</b></div>
-   <div class="row"><span><b class="minus">Gaat nog af</b><div class="small">Geplande rekeningen deze maand</div></span><b class="minus">−${eur(futureBills)}</b></div>
+   <div class="row"><span><b class="plus">Nog te ontvangen</b><div class="small">Inkomsten met een datum na vandaag</div></span><b class="plus">+${eur(futureIn)}</b></div>
+   <div class="row"><span><b class="minus">Al uitgegeven</b><div class="small">Uitgaven die deze maand al zijn verwerkt</div></span><b class="minus">−${eur(out)}</b></div>
+   <div class="row"><span><b class="minus">Gaat nog af</b><div class="small">Rekeningen en geplande uitgaven na vandaag</div></span><b class="minus">−${eur(futureOut)}</b></div>
    <div class="divider"></div>
-   <div class="row"><span><b>Daarna over</b><div class="small">Als alle geplande posten zijn verwerkt</div></span><b>${eur(afterBills)}</b></div>
+   <div class="row"><span><b>Daarna over</b><div class="small">Nu beschikbaar + wat nog binnenkomt − wat nog afgaat</div></span><b>${eur(afterBills)}</b></div>
  </div>
  ${upcomingBills.length?`<div class="card"><b>Wat gaat er nog af?</b>${upcomingBills.slice(0,6).map(x=>`<div class="row small"><span>${esc(x.name)} · ${nlDate(x.date)}</span><b class="minus">−${eur(x.amount)}</b></div>`).join('')}</div>`:''}
  ${upcomingIncome.length?`<div class="card"><b>Wat komt er nog binnen?</b>${upcomingIncome.slice(0,6).map(x=>`<div class="row small"><span>${esc(x.name)} · ${nlDate(x.date)}</span><b class="plus">+${eur(x.amount)}</b></div>`).join('')}</div>`:''}
  <div class="card"><div class="row"><span>Inkomsten deze maand</span><b class="plus">${eur(income)}</b></div><div class="row"><span>Uitgaven deze maand</span><b class="minus">${eur(out)}</b></div></div>`;
- const recent=[...tx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
- document.getElementById('homeTransactions').innerHTML=recent.length?recent.map(t=>transactionCard(t,false)).join(''):'<div class="card empty">Nog geen transacties. Je begint helemaal schoon.</div>';
+ const recent=[...actualTx].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+ document.getElementById('homeTransactions').innerHTML=recent.length?recent.map(t=>transactionCard(t,false)).join(''):'<div class="card empty">Nog geen afgeronde transacties deze maand.</div>';
 }
 function transactionCard(t,actions=true){
  const idx=state.transactions.findIndex(x=>x.id===t.id);
