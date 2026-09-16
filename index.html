@@ -261,15 +261,33 @@ function addPeriod(date,frequency){
 function syncRecurringIncome(){
  const now=today(); let changed=false;
  state.recurringIncome.forEach(r=>{
-   if(r.frequency==='once' || !r.nextDate) return;
+   if(!r.nextDate) return;
+   if(r.frequency==='once'){
+     if(r.nextDate<=now){
+       const exists=state.transactions.some(t=>t.recurringId===r.id && t.date===r.nextDate && t.type==='in');
+       if(!exists){state.transactions.push({id:uid(),type:'in',amount:Number(r.amount),description:r.name,date:r.nextDate,category:r.category||'Salaris',method:r.method||'bank',accountId:r.accountId||'',recurringId:r.id});changed=true;}
+     }
+     return;
+   }
    while(r.nextDate<=now){
      const exists=state.transactions.some(t=>t.recurringId===r.id && t.date===r.nextDate && t.type==='in');
-     if(!exists){
-       state.transactions.push({id:uid(),type:'in',amount:Number(r.amount),description:r.name,date:r.nextDate,category:r.category||'Salaris',method:r.method||'bank',accountId:r.accountId||'',recurringId:r.id});
-       changed=true;
+     if(!exists){state.transactions.push({id:uid(),type:'in',amount:Number(r.amount),description:r.name,date:r.nextDate,category:r.category||'Salaris',method:r.method||'bank',accountId:r.accountId||'',recurringId:r.id});changed=true;}
+     r.nextDate=addPeriod(r.nextDate,r.frequency); changed=true;
+   }
+ });
+ state.bills.forEach(b=>{
+   if(!b.nextDate) return;
+   if(b.frequency==='once'){
+     if(b.nextDate<=now){
+       const exists=state.transactions.some(t=>t.recurringId===b.id && t.date===b.nextDate && t.type==='out');
+       if(!exists){state.transactions.push({id:uid(),type:'out',amount:Number(b.amount),description:b.name,date:b.nextDate,category:b.category||'Overig',method:'bank',accountId:b.accountId||'',recurringId:b.id});changed=true;}
      }
-     r.nextDate=addPeriod(r.nextDate,r.frequency);
-     changed=true;
+     return;
+   }
+   while(b.nextDate<=now){
+     const exists=state.transactions.some(t=>t.recurringId===b.id && t.date===b.nextDate && t.type==='out');
+     if(!exists){state.transactions.push({id:uid(),type:'out',amount:Number(b.amount),description:b.name,date:b.nextDate,category:b.category||'Overig',method:'bank',accountId:b.accountId||'',recurringId:b.id});changed=true;}
+     b.nextDate=addPeriod(b.nextDate,b.frequency); changed=true;
    }
  });
  if(changed) save();
@@ -280,13 +298,14 @@ function renderRecurring(){
 }
 function renderBills(){
  const el=document.getElementById('billList');
- el.innerHTML=state.bills.length?state.bills.map((b,i)=>`<div class="card"><div class="row"><span><b>${esc(b.name)}</b><div class="small">${freqLabel(b.frequency)} · volgende: ${nlDate(b.nextDate)}</div></span><b class="minus">${eur(b.amount)}</b></div><div class="action-row"><button data-edit-bill="${i}">Aanpassen</button><button class="danger" data-delete-bill="${i}">Verwijderen</button></div></div>`).join(''):'<div class="card empty">Nog geen vaste rekeningen ingesteld.</div>';
+ el.innerHTML=state.bills.length?state.bills.map((b,i)=>`<div class="card"><div class="row"><span><b>${esc(b.name)}</b><div class="small">${esc(b.category||'Overig')} · ${freqLabel(b.frequency)} · volgende: ${nlDate(b.nextDate)}</div></span><b class="minus">${eur(b.amount)}</b></div><div class="action-row"><button data-edit-bill="${i}">Aanpassen</button><button class="danger" data-delete-bill="${i}">Verwijderen</button></div></div>`).join(''):'<div class="card empty">Nog geen vaste rekeningen ingesteld.</div>';
 }
 function recurringForm(r=null,isBill=false){
  const x=r||{};
  return `<form>
  <div class="field"><label>Naam</label><input name="name" required value="${esc(x.name||'')}"></div>
  <div class="field"><label>Bedrag</label><input name="amount" type="text" inputmode="decimal" min="0.01" required value="${moneyValue(x.amount)}"></div>
+ ${isBill?`<div class="field"><label>Categorie</label><select name="category">${state.expenseCategories.map(c=>`<option ${c===(x.category||'Overig')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`:`<div class="field"><label>Categorie</label><select name="category">${state.incomeCategories.map(c=>`<option ${c===(x.category||'Salaris')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`}
  <div class="field"><label>Frequentie</label><select name="frequency">
  <option value="week" ${x.frequency==='week'?'selected':''}>Per week</option>
  <option value="4weeks" ${x.frequency==='4weeks'?'selected':''}>Per 4 weken</option>
@@ -302,14 +321,14 @@ function recurringForm(r=null,isBill=false){
 function addRecurring(edit=null){
  const r=edit!==null?state.recurringIncome[edit]:null;
  openModal(edit!==null?'Terugkerende inkomsten aanpassen':'Terugkerende inkomsten instellen','De frequentie blijft bewaard.',recurringForm(r,false),fd=>{
-   const obj={id:r?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   const obj={id:r?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),category:fd.get('category')||'Salaris',frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
    if(edit!==null)state.recurringIncome[edit]=obj;else state.recurringIncome.push(obj);save();render();
  });
 }
 function addBill(edit=null){
  const b=edit!==null?state.bills[edit]:null;
  openModal(edit!==null?'Rekening aanpassen':'Vaste rekening toevoegen','Bijvoorbeeld per week, per 4 weken, per maand of per jaar.',recurringForm(b,true),fd=>{
-   const obj={id:b?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
+   const obj={id:b?.id||uid(),name:fd.get('name'),amount:money(fd.get('amount')),category:fd.get('category')||'Overig',frequency:fd.get('frequency'),nextDate:fd.get('nextDate'),accountId:fd.get('accountId')||''};
    if(edit!==null)state.bills[edit]=obj;else state.bills.push(obj);save();render();
  });
 }
