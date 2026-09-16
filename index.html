@@ -117,8 +117,8 @@ header{padding:24px 20px 8px;display:flex;align-items:center;justify-content:spa
 <div id="modalBack" class="modal-back"><div class="modal"><div class="row"><div><div class="modal-title" id="modalTitle"></div><div class="small" id="modalSub"></div></div><button id="modalClose" class="outline">Sluiten</button></div><div id="modalBody"></div></div></div>
 
 <script>
-const KEY='mijn_budgetplanner_clean_v6';
-const OLD_KEYS=['mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
+const KEY='mijn_budgetplanner_clean_v7';
+const OLD_KEYS=['mijn_budgetplanner_clean_v6','mijn_budgetplanner_clean_v5','mijn_budgetplanner_clean_v4','mijn_budgetplanner_clean_v3'];
 const euro=new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR'});
 const eur=n=>euro.format(Number(n)||0);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -132,6 +132,8 @@ state=state||{
   incomeCategories:['Salaris','Kinderbijslag','Toeslagen','Overige inkomsten'],
   expenseCategories:['Boodschappen','Wonen','Vervoer','Kleding','Kinderen','Huisdieren','Sport','Leuke dingen','Vakantie','Overig']
 };
+state.pots=(state.pots||[]).map(p=>({...p,kind:p.kind||'saving',contributions:p.contributions||[]}));
+
 let viewMonth=new Date(); viewMonth.setDate(1);
 let txType='out';
 
@@ -206,8 +208,10 @@ function renderAccounts(){
 function renderPots(){
  const el=document.getElementById('potList');
  el.innerHTML=state.pots.length?state.pots.map((p,i)=>{
-   const saved=p.contributions.reduce((s,c)=>s+c.amount,0), pct=p.target?Math.min(100,saved/p.target*100):0;
-   return `<div class="card"><div class="row"><span><b>${esc(p.name)}</b><div class="small">${eur(saved)} van ${eur(p.target)}</div></span><b>${Math.round(pct)}%</b></div><div class="progress"><span style="width:${pct}%"></span></div><div class="action-row"><button data-pot-detail="${i}">Bekijk inleg</button><button data-add-pot="${i}">＋ Inleggen</button><button data-edit-pot="${i}">Aanpassen</button><button class="danger" data-delete-pot="${i}">Verwijderen</button></div></div>`
+   const saved=(p.contributions||[]).reduce((s,c)=>s+c.amount,0);
+   const isInv=p.kind==='investment';
+   const pct=!isInv&&p.target?Math.min(100,saved/p.target*100):0;
+   return `<div class="card"><div class="row"><span><b>${esc(p.name)}</b><div class="small">${isInv?'Totaal ingelegd: '+eur(saved):eur(saved)+' van '+eur(p.target)}</div></span>${isInv?'<b>Beleggingen</b>':`<b>${Math.round(pct)}%</b>`}</div>${isInv?'':`<div class="progress"><span style="width:${pct}%"></span></div>`}<div class="action-row"><button data-pot-detail="${i}">Bekijk ${isInv?'inleg':'inleg'}</button><button data-add-pot="${i}">＋ Inleggen</button><button data-edit-pot="${i}">Aanpassen</button><button class="danger" data-delete-pot="${i}">Verwijderen</button></div></div>`
  }).join(''):'<div class="card empty">Nog geen potjes. Dat is expres: je begint schoon en maakt alleen aan wat je nodig hebt.</div>';
 }
 function budgetRange(freq){
@@ -362,18 +366,21 @@ function addAccount(edit=null){
  });
 }
 function addPot(edit=null){
- const p=edit!==null?state.pots[edit]:{name:'',target:0,contributions:[]};
+ const p=edit!==null?state.pots[edit]:{name:'',kind:'saving',target:0,contributions:[]};
+ p.kind=p.kind||'saving';
  openModal(
    edit!==null?'Potje aanpassen':'Nieuw potje',
-   edit!==null?'Pas de naam en/of het doelbedrag aan. Je bestaande inleg blijft staan.':'Maak alleen de potjes die je echt nodig hebt.',
+   edit!==null?'Pas de naam, soort en/of het bedrag aan. Je bestaande inleg blijft staan.':'Maak een spaarpotje of houd je beleggingen bij op basis van totaal ingelegd.',
    `<form>
       <div class="field"><label>Naam van het potje</label><input name="name" required value="${esc(p.name)}"></div>
-      <div class="field"><label>Doelbedrag</label><input name="target" type="number" step="0.01" min="0" required value="${p.target||''}"></div>
+      <div class="field"><label>Soort</label><select name="kind"><option value="saving" ${p.kind!=='investment'?'selected':''}>Spaarpotje</option><option value="investment" ${p.kind==='investment'?'selected':''}>Beleggingen</option></select></div>
+      <div class="field"><label>${p.kind==='investment'?'Totaal ingelegd':'Doelbedrag'}</label><input name="target" type="number" step="0.01" min="0" ${p.kind==='investment'?'':'required'} value="${p.target||''}"></div>
       ${edit!==null?`<div class="card" style="margin:12px 0;background:#fff7f9"><b>Let op</b><div class="small">Het aanpassen van het doelbedrag verandert alleen het doel. Je bestaande inleggen blijven behouden.</div></div>`:''}
       <button class="primary">Opslaan</button>
     </form>`,
    fd=>{
      p.name=fd.get('name');
+     p.kind=fd.get('kind')||'saving';
      p.target=Number(fd.get('target')||0);
      p.contributions=p.contributions||[];
      if(edit!==null)state.pots[edit]=p;else state.pots.push({...p,id:uid()});
@@ -390,12 +397,12 @@ function addContribution(i){
  });
 }
 function showPotDetail(i){
- const p=state.pots[i], total=p.contributions.reduce((s,c)=>s+c.amount,0);
+ const p=state.pots[i], total=(p.contributions||[]).reduce((s,c)=>s+c.amount,0), isInv=p.kind==='investment';
  const rows=p.contributions.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(c=>{
    const j=p.contributions.indexOf(c);
    return `<div class="card"><div class="row"><span><b>${esc(c.note||'Inleg')}</b><div class="small">${nlDate(c.date)}</div></span><b>${eur(c.amount)}</b></div><div class="action-row"><button data-edit-con="${i}:${j}">Aanpassen</button><button class="danger" data-delete-con="${i}:${j}">Verwijderen</button></div></div>`
  }).join('');
- openModal(p.name,'Inlegoverzicht',`<div class="card"><div class="row"><span>Gespaard</span><b>${eur(total)}</b></div><div class="row"><span>Doel</span><b>${eur(p.target)}</b></div></div>${rows||'<div class="empty">Nog geen inleg. Voeg hieronder je eerste inleg toe.</div>'}<button class="primary" data-modal-add-con="${i}">＋ Inleg toevoegen</button>`);
+ openModal(p.name,'Inlegoverzicht',`<div class="card"><div class="row"><span>${isInv?'Totaal ingelegd':'Gespaard'}</span><b>${eur(total)}</b></div>${isInv?'':`<div class="row"><span>Doel</span><b>${eur(p.target)}</b></div>`}</div>${rows||'<div class="empty">Nog geen inleg. Voeg hieronder je eerste inleg toe.</div>'}<button class="primary" data-modal-add-con="${i}">＋ Inleg toevoegen</button>`);
 }
 function manageCategories(){
  const renderList=(type,items)=>items.map((c,i)=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #eee5e7"><span>${esc(c)}</span><button class="action-row" data-delete-category="${type}:${i}" style="margin:0;background:#fff0f1;color:#b05e68;border-radius:12px;padding:8px 10px;font-size:12px;font-weight:600">Verwijderen</button></div>`).join('');
